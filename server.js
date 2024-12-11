@@ -8,10 +8,12 @@ const server = http.createServer(app);
 const { Server } = require('socket.io');;
 const io = new Server(server);
 
+const fs = require('fs');
+
 app.use(express.json())
 app.use(cors());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 
 const users = [
@@ -142,9 +144,23 @@ function handleNotification(req, res) {
     return res.json(false); // Send response and exit function
 }
 
+function isAdmin(data) {
+    const user = getUser(data.id, 'id');
+    return user && user.username === 'admin' && user.password === 'thunderfighter';
+}
 
-app.get('/', (req, res) => {
-    res.send('Hello World!');
+app.get('/admin', (req, res) => {
+    const data = req.query;
+    if(isAdmin(data)){
+        res.send('You are the admin');
+    }
+});
+
+app.get('/getUsers', (req, res) => {
+    const data = req.query;
+    if(isAdmin(data)){
+        res.json(users);
+    }
 });
 
 app.get('/checkUsernameAvailability', (req, res) => {
