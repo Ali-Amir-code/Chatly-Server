@@ -8,12 +8,10 @@ const server = http.createServer(app);
 const { Server } = require('socket.io');;
 const io = new Server(server);
 
-const fs = require('fs');
-
 app.use(express.json())
 app.use(cors());
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 
 const users = [
@@ -80,7 +78,6 @@ async function register(req, res) {
             username: data.username,
             name: data.name,
             password: data.password,
-            contacts: [],
             notifications: [],
         },
         contacts: []
@@ -99,15 +96,11 @@ async function login(req, res) {
     const user = users.find(user => user.username === username && user.password === password);
     if (user) {
         const dataForClient = {
-            me: {
-                id: user.id,
-                username: user.username,
-                name: user.name,
-                password: user.password,
-                contacts: user.addedUsers,
-                notifications: user.notifications,
-            },
-            contacts: user.addedUsers,
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            password: user.password,
+            notifications: user.notifications,
         }
         res.json(dataForClient);
     } else {
@@ -116,14 +109,13 @@ async function login(req, res) {
 }
 
 function handleNotification(req, res) {
-    console.log('in handleNotification',req.body);
     const notification = req.body;
 
     if (!notification) {
         return res.json(false); // Send response and exit function
     }
     const onlineUser = onlineUserIDs.has(notification.receiverId);
-    
+
     if (onlineUser) {
         io.to(onlineUserIDs.get(notification.receiverId)).emit('notification', notification);
         return res.json(true); // Send response and exit function
@@ -144,23 +136,9 @@ function handleNotification(req, res) {
     return res.json(false); // Send response and exit function
 }
 
-function isAdmin(data) {
-    const user = getUser(data.id, 'id');
-    return user && user.username === 'admin' && user.password === 'thunderfighter';
-}
 
-app.get('/admin', (req, res) => {
-    const data = req.query;
-    if(isAdmin(data)){
-        res.send('You are the admin');
-    }
-});
-
-app.get('/getUsers', (req, res) => {
-    const data = req.query;
-    if(isAdmin(data)){
-        res.json(users);
-    }
+app.get('/', (req, res) => {
+    res.send('Hello World!');
 });
 
 app.get('/checkUsernameAvailability', (req, res) => {
@@ -198,6 +176,7 @@ app.get('/getContact', (req, res) => {
             name: contact.name,
             username: contact.username,
             messages: contact.unDeliveredMessages,
+            haveUnreadMessages: contact.unDeliveredMessages.length > 0,
         };
         return res.json(contactForClient);
     }
@@ -219,23 +198,23 @@ server.listen(PORT, () => {
 io.use((socket, next) => {
     const data = socket.handshake.auth.user;
     if (!data || !data.id || !data.username || !data.password) {
-        console.log('Authentication data is missing');
         return next(new Error('Authentication data is missing'));
     }
     if (isValidUser(data)) {
         onlineUserIDs.set(data.id, socket.id);
-        console.log('Id have been set');
         return next();
     }
-    console.log('Authentication error');
     next(new Error('Authentication error'));
 });
 
 io.on('connection', (socket) => {
     const userId = getKeyByValue(onlineUserIDs, socket.id);
-    if(userId.unDeliveredMessages.length > 0){
-        socket.emit('unDeliveredMessages', userId.unDeliveredMessages);
+    const user = getUser(userId, 'id');
+    if (user.unDeliveredMessages.length > 0) {
+        socket.emit('unDeliveredMessages', user.unDeliveredMessages);
+        user.unDeliveredMessages = [];
     }
+
     socket.on('disconnect', () => {
         if (userId) {
             onlineUserIDs.delete(userId);
@@ -246,7 +225,7 @@ io.on('connection', (socket) => {
         const receiverSocket = onlineUserIDs.get(data.to);
         if (receiverSocket) {
             io.to(receiverSocket).emit('message', data);
-        }else{
+        } else {
             const receivingUser = users.find(user => user.id === data.to);
             receivingUser.unDeliveredMessages.push(data);
         }
